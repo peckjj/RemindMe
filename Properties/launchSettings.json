@@ -1,0 +1,27 @@
+{
+  "profiles": {
+    "RemindMe": {
+      "commandName": "Project"
+    },
+    "Simple Arg": {
+      "commandName": "Project",
+      "commandLineArgs": "\"Simple Arg\""
+    },
+    "add": {
+      "commandName": "Project",
+      "commandLineArgs": "add \"This is a new task\""
+    },
+    "add with args": {
+      "commandName": "Project",
+      "commandLineArgs": "add \"This is a new task\" --verbose -v -verbose"
+    },
+    "get with args": {
+      "commandName": "Project",
+      "commandLineArgs": "get \"a new\" --verbose -v -verbose"
+    },
+    "add no quotes": {
+      "commandName": "Project",
+      "commandLineArgs": "add This is a new task"
+    }
+  }
+}
