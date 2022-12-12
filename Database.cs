@@ -6,14 +6,19 @@ using System.Linq;
 using System.Text;
 using RemindMe.Models;
 using TaskStatus = RemindMe.Models.TaskStatus;
+using System.Reflection;
 
 namespace RemindMe
 {
     internal class Database
     {
+        private static string connString = "Data Source=" +
+                                           Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) +
+                                           "/reminders.db";
         internal static void CreateDb()
         {
-            using (SqliteConnection connection = new SqliteConnection("Data Source=reminders.db"))
+            using (SqliteConnection connection = new SqliteConnection(connString)
+                  )
             {
                 connection.Open();
 
@@ -43,7 +48,7 @@ namespace RemindMe
             Task? insertedTask;
             long insertedId;
 
-            using (SqliteConnection conn = new SqliteConnection("Data Source=reminders.db"))
+            using (SqliteConnection conn = new SqliteConnection(connString))
             {
                 conn.Open();
                 using (var transaction = conn.BeginTransaction())
@@ -100,7 +105,7 @@ namespace RemindMe
         {
             Task? task;
 
-            using (SqliteConnection conn = new SqliteConnection("Data Source=reminders.db"))
+            using (SqliteConnection conn = new SqliteConnection(connString))
             {
                 conn.Open();
                 using (var transaction = conn.BeginTransaction())
@@ -147,7 +152,7 @@ namespace RemindMe
         {
             List<Task> result = new();
 
-            using (SqliteConnection conn = new SqliteConnection("Data Source=reminders.db"))
+            using (SqliteConnection conn = new SqliteConnection(connString))
             {
                 conn.Open();
                 using (var transaction = conn.BeginTransaction())

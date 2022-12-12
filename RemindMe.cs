@@ -2,6 +2,7 @@
 using RemindMe.Constants;
 using Microsoft.Data.Sqlite;
 using Task = RemindMe.Models.Task;
+using System.Reflection;
 
 namespace RemindMe
 {
@@ -70,7 +71,7 @@ namespace RemindMe
                     return;
                 }
 
-                if (!File.Exists("reminders.db"))
+                if (!File.Exists(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/reminders.db"))
                 {
                     Console.WriteLine("Database does not exist, creating reminders.db");
                     Database.CreateDb();
