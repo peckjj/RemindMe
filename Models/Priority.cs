@@ -19,14 +19,24 @@ namespace RemindMe.Models
             } 
         }
 
-        public Priority(int p)
+        public Priority(int? p)
         {
-            Value = p;
+            Value = p ?? PriorityConstants.MED;
         }
 
         public override string ToString()
         {
             return value.ToString();
+        }
+
+        public static bool operator < (Priority left, Priority right)
+        {
+            return left.Value < right.Value;
+        }
+
+        public static bool operator > (Priority left, Priority right)
+        {
+            return left.Value > right.Value;
         }
     }
 }

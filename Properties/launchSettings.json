@@ -22,6 +22,10 @@
     "add no quotes": {
       "commandName": "Project",
       "commandLineArgs": "add This is a new task"
+    },
+    "get with prio": {
+      "commandName": "Project",
+      "commandLineArgs": "get task -p 5"
     }
   }
 }

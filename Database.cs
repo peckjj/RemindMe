@@ -150,8 +150,6 @@ namespace RemindMe
 
         public static IEnumerable<Task> GetTaskByDesc(string desc)
         {
-            List<Task> result = new();
-
             using (SqliteConnection conn = new SqliteConnection(connString))
             {
                 conn.Open();
@@ -168,9 +166,47 @@ namespace RemindMe
 
                     var reader = command.ExecuteReader();
 
-                    result = ReaderToTaskList(reader).ToList();
+                    return ReaderToTaskList(reader).ToList();
+                }
+            }
+        }
 
-                    return result;
+        public static IEnumerable<Task> GetTaskByPrio(string? desc, Priority? max, Priority? min = null) 
+        {
+            using (SqliteConnection conn = new SqliteConnection(connString))
+            {
+                conn.Open();
+                using (var transaction = conn.BeginTransaction())
+                {
+                    var command = conn.CreateCommand();
+                    command.CommandText =
+                    @"
+                        SELECT desc, prio, date, due, status, project, id FROM tasks
+                    ";
+
+                    if (desc != null)
+                    {
+                        command.CommandText += "WHERE desc LIKE $desc";
+                        command.Parameters.AddWithValue("$desc", '%' + desc + '%');
+                    }
+
+                    if (max != null)
+                    {
+                        command.CommandText += " AND prio <= $max";
+                        command.Parameters.AddWithValue("$max", max.Value);
+                    }
+
+                    if (min != null)
+                    {
+                        command.CommandText += " AND prio >= $min";
+                        command.Parameters.AddWithValue("$min", min.Value);
+                    }
+
+                    command.CommandText += ';';
+
+                    var reader = command.ExecuteReader();
+
+                    return ReaderToTaskList(reader);
                 }
             }
         }
