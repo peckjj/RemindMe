@@ -8,15 +8,20 @@ namespace RemindMe
 {
     internal class RemindMe
     {
+        static ArgParseOption[] options = { };
+        static string? command = null;
+
+        static bool verbose = false;
+        static long? id = null;
+        static string[] data = new string[] { };
+
+        static Priority? priority = null;
+        static Priority? minPrio = null;
+        static Priority? maxPrio = null;
         static void Main(string[] args)
         {
-            string? command = null;
 
-            bool verbose = false;
-            long? id = null;
-            string[] data = new string[] { };
-
-            ArgParseOption[] options = new ArgParseOption[]
+            options = new ArgParseOption[]
             {
                 new ArgParseOption (
                     new string[]{CommandConstants.ADD, CommandConstants.GET},
@@ -26,7 +31,7 @@ namespace RemindMe
                     passArgToLambda: true
                     ),
                 new ArgParseOption (
-                    new string[]{"-verbose", "--verbose", "-v"},
+                    new string[]{"--verbose", "-v"},
                     val => verbose = true,
                     "Turns on verbose logging to console"
                     ),
@@ -37,10 +42,87 @@ namespace RemindMe
                         if (val != null)
                         {
                             id = long.Parse(val);
+                        } else
+                        {
+                            Console.WriteLine("No id given.");
+                            Usage();
+                            System.Environment.Exit(0);
                         }
                     },
                     "Filter by a specific task <ID>. Returns only one result",
                     "<ID>"
+                    ),
+                new ArgParseOption (
+                    new string[] {"--priority=", "--prio=", "-p="},
+                    val =>
+                    {
+                        if (val != null)
+                        {
+                            priority = new Priority(int.Parse(val));
+                        } else
+                        {
+                            Console.WriteLine("No priority given.");
+                            Usage();
+                            System.Environment.Exit(0);
+                        }
+                    },
+                    "Filter tasks by a given priority",
+                    "<priority>"
+                    ),
+                new ArgParseOption (
+                    new string[] {"--minPrio=", "--min=", "-m="},
+                    val =>
+                    {
+                        if (val != null)
+                        {
+                            minPrio = new Priority(int.Parse(val));
+
+                            if (maxPrio != null && minPrio > maxPrio)
+                            {
+                                Console.WriteLine("Maximum priority cannot be less than Minimum priority.");
+                                System.Environment.Exit(0);
+                            }
+
+                        } else
+                        {
+                            Console.WriteLine("No minimum priority given.");
+                            Usage();
+                            System.Environment.Exit(0);
+                        }
+                    },
+                    "Filter tasks by a minimum priority, inclusively.",
+                    "<priority>"
+                    ),
+                new ArgParseOption (
+                    new string[] {"--maxPrio=", "--max=", "-M="},
+                    val =>
+                    {
+                        if (val != null)
+                        {
+                            maxPrio = new Priority(int.Parse(val));
+
+                            if (minPrio != null && maxPrio < minPrio)
+                            {
+                                Console.WriteLine("Maximum priority cannot be less than Minimum priority.");
+                                System.Environment.Exit(0);
+                            }
+                        } else
+                        {
+                            Console.WriteLine("No maximum priority given.");
+                            Usage();
+                            System.Environment.Exit(0);
+                        }
+                    },
+                    "Filter tasks by a given maximum priority, inclusively.",
+                    "<priority>"
+                    ),
+                new ArgParseOption (
+                    new string[] {"--help", "-help", "--?", "-?", "/?", "-h", "--h"},
+                    val =>
+                    {
+                        Usage();
+                        System.Environment.Exit(0);
+                    }
                     )
             };
             try
@@ -51,14 +133,14 @@ namespace RemindMe
                 if (e is ArgParseNoMatchException || e is ArgParseNoValueException)
                 {
                     Console.WriteLine(e.Message);
-                    Usage(options);
+                    Usage();
                     return;
                 }
             }
 
             if (command == null)
             {
-                Usage(options);
+                Usage();
                 return;
             }
 
@@ -67,7 +149,7 @@ namespace RemindMe
             {
                 if (data.Length < 1)
                 {
-                    Usage(options);
+                    Usage();
                     return;
                 }
 
@@ -78,7 +160,8 @@ namespace RemindMe
                 }
 
                 // Allows for shorthand, you can add a task without quotes
-                Task? task = Database.AddTask(new Task(data.Aggregate("", (acc, cur) => acc + " " + cur).Trim()));
+                Task? task = Database.AddTask(new Task(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur),
+                                                       new Priority(priority != null ? priority.Value : PriorityConstants.MED)));
 
                 if (task != null)
                 {
@@ -101,7 +184,17 @@ namespace RemindMe
                 if (id != null)
                 {
                     tasks = new Task?[] { Database.GetTask((long)id) };
-                } else
+                } else if (priority != null || minPrio != null || maxPrio != null)
+                {
+                    if (priority != null)
+                    {
+                        tasks = Database.GetTaskByPrio(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur), priority, priority).ToArray();
+                    } else
+                    {
+                        tasks = Database.GetTaskByPrio(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur), maxPrio, minPrio).ToArray();
+                    }
+                }
+                else
                 {
                     tasks = Database.GetTaskByDesc(data[0]).ToArray();
                 }
@@ -110,14 +203,15 @@ namespace RemindMe
             }
             else
             {
-                Usage(options);
+                Usage();
             }
 
         }
 
         static void DisplayTasks(Task?[]? tasks)
         {
-            if (tasks == null) { return; }
+            if (tasks == null || tasks.Length < 1) { Console.WriteLine("No tasks found."); return; }
+            if (verbose) { Console.WriteLine(String.Format("{0} tasks found:", tasks.Length)); }
             foreach (Task? task in tasks)
             {
                 if (task != null)
@@ -127,19 +221,19 @@ namespace RemindMe
             }
         }
 
-        static void Usage(ArgParseOption[] opts = null)
+        static void Usage()
         {
             Console.WriteLine("Usage: <Command> [opts]\nCommands:");
             Console.WriteLine("\nadd <task> [opts]:\t\tAdds a new task to the list");
             Console.WriteLine("get <task> [opts]:\t\tGets a list of tasks. [opts] can be used to apply filters. <task> will be used to search for similar tasks");
-            if (opts == null)
+            if (options == null)
             {
                 return;
             }
 
             Console.WriteLine("\nOpts:");
 
-            foreach (ArgParseOption option in opts)
+            foreach (ArgParseOption option in options)
             {
                 if (option.desc != null)
                 {
