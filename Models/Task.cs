@@ -15,23 +15,29 @@ namespace RemindMe.Models
         public DateTime Due { get; set; }
         public Priority Prio { get; set; }
         public string Project { get; set; }
-        public TaskStatus Status { get; set; }
-        public Task(string v) : this(v, null, null, null, null, null, new TaskStatus(TaskStatusConstants.NEW))
+        public string Status { get; set; }
+        public bool IsCompleted { get; set; }
+        public Task(string v) : this(v, null, null, null, null, null, "active", false)
         {   
             
         }
 
-        public Task(string v, Priority prio) : this(v, prio, null, null, null, null, new TaskStatus(TaskStatusConstants.NEW))
+        public Task(string v, Priority prio) : this(v, prio, false)
         {
 
         }
 
-        public Task(string desc, int prio, DateTime date, DateTime due, string project, long id, TaskStatus status) : this(desc, new Priority(prio), date, due, project, id, status)
+        public Task(string v, Priority prio, bool isCompleted) : this(v, prio, null, null, null, null, "active", isCompleted)
         {
 
         }
 
-        public Task(string desc, Priority? prio, DateTime? date, DateTime? due, string? project, long? id, TaskStatus status)
+        public Task(string desc, int prio, DateTime date, DateTime due, string project, long id, string status, bool isCompleted) : this(desc, new Priority(prio), date, due, project, id, status, isCompleted)
+        {
+
+        }
+
+        public Task(string desc, Priority? prio, DateTime? date, DateTime? due, string? project, long? id, string status, bool isCompleted)
         {
             Id = id;
             Desc = desc;
@@ -40,6 +46,7 @@ namespace RemindMe.Models
             Due = due ?? DateTime.MaxValue;
             Project = project ?? "";
             Status = status;
+            IsCompleted = isCompleted;
         }
     }
 }

@@ -12,14 +12,14 @@ namespace RemindMe
         public string[] aliases = new string[] { };
         public bool passArgToLambda = false;
         public string? desc;
-        public string? paramDesc;
+        public string? optParam;
 
         public ArgParseOption(string[] aliases, Action<string?> lambda, string? desc = null, string? paramDesc = null, bool passArgToLambda = false)
         {
             this.lambda = lambda;
             this.aliases = aliases;
             this.desc = desc;
-            this.paramDesc = paramDesc;
+            this.optParam = paramDesc;
             this.passArgToLambda = passArgToLambda;
         }
     }
@@ -65,7 +65,13 @@ namespace RemindMe
                     }
 
                     // Increment i before being accessed to continue the for-loop
-                    val = args[++i];
+                    try
+                    {
+                        val = args[++i];
+                    } catch (IndexOutOfRangeException e)
+                    {
+                        throw new ArgParseNoValueException("No value given for option: " + args[--i]);
+                    }
                 }
 
                 if (curOpt.passArgToLambda)

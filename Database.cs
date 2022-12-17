@@ -1,20 +1,18 @@
 ﻿using Microsoft.Data.Sqlite;
 using Task = RemindMe.Models.Task;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using RemindMe.Models;
-using TaskStatus = RemindMe.Models.TaskStatus;
 using System.Reflection;
 
 namespace RemindMe
 {
     internal class Database
     {
+        private static readonly string dbVersion = "0.1";
+
         private static string connString = "Data Source=" +
                                            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) +
                                            "/reminders.db";
+        private static string selectAllFieldsFromTasks = "SELECT desc, prio, date, due, status, project, id, isCompleted FROM tasks "; 
         internal static void CreateDb()
         {
             using (SqliteConnection connection = new SqliteConnection(connString)
@@ -23,20 +21,38 @@ namespace RemindMe
                 connection.Open();
 
                 // Create tasks table
-                string taskTable = @"
+                string createTables = @"
                 CREATE TABLE ""tasks"" (
-                    ""id""      INTEGER,
-	                ""desc""    TEXT NOT NULL,
-	                ""date""    TEXT NOT NULL,
-	                ""due""     TEXT,
-	                ""prio""    INTEGER NOT NULL,
-                    ""project"" TEXT,
-                    ""status""  TEXT NOT NULL,
+	                ""id""	        INTEGER,
+	                ""desc""	    TEXT NOT NULL,
+	                ""date""	    TEXT NOT NULL,
+	                ""due""	        TEXT,
+	                ""prio""	    INTEGER NOT NULL,
+	                ""project""	    TEXT,
+	                ""status""	    TEXT NOT NULL,
+	                ""isCompleted""	TEXT NOT NULL CHECK(""isCompleted"" = ""True"" OR ""isCompleted"" = ""False""),
 	                PRIMARY KEY(""id"" AUTOINCREMENT)
-                ); ";
+                )
+                ;
+                CREATE TABLE ""meta"" (
+	                ""db_version""	TEXT NOT NULL UNIQUE,
+	                ""createdOn""	TEXT NOT NULL,
+	                ""updatedOn""	INTEGER NOT NULL
+                )
+                ;
+                INSERT INTO meta VALUES(
+                    $dbVersion,
+                    $createdOn,
+                    $updatedOn
+                )
+                ;";
 
                 var command = connection.CreateCommand();
-                command.CommandText = taskTable;
+                command.CommandText = createTables;
+
+                command.Parameters.AddWithValue("$dbVersion", dbVersion);
+                command.Parameters.AddWithValue("createdOn", DateTime.Now.ToString());
+                command.Parameters.AddWithValue("updatedOn", DateTime.Now.ToString());
 
                 command.ExecuteNonQuery();
 
@@ -45,65 +61,79 @@ namespace RemindMe
         }
         public static Task? AddTask(Task task)
         {
-            Task? insertedTask;
-            long insertedId;
+            Task? insertedTask = null;
+            long? insertedId = null;
 
             using (SqliteConnection conn = new SqliteConnection(connString))
             {
                 conn.Open();
                 using (var transaction = conn.BeginTransaction())
                 {
-
-                    var command = conn.CreateCommand();
-
-                    command.CommandText =
-                    @"
-                    INSERT INTO tasks (
-                        desc,
-                        prio,
-                        date, 
-                        due, 
-                        project,
-                        status
-                    )
-                    VALUES(
-                        $Desc,
-                        $Prio,
-                        $Date,
-                        $Due,
-                        $Project,
-                        $Status
-                    );
-                    select last_insert_rowid();
-                ";
-
-                    command.Parameters.AddWithValue("$Desc", task.Desc);
-                    command.Parameters.AddWithValue("$Date", task.Date.ToString());
-                    command.Parameters.AddWithValue("$Due", task.Due.ToString());
-                    command.Parameters.AddWithValue("$Prio", task.Prio.Value);
-                    command.Parameters.AddWithValue("$Project", task.Project);
-                    command.Parameters.AddWithValue("$Status", task.Status.ToString());
-
-                    var id = command.ExecuteScalar();
-
-                    if (id == null)
+                    try
                     {
-                        transaction.Rollback();
-                        throw new Exception("Insertion failed, no row id");
-                    }
 
-                    transaction.Commit();
-                    
-                    insertedId = (long)id;
-                    insertedTask = GetTask(insertedId);
+                        var command = conn.CreateCommand();
+
+                        command.CommandText =
+                        @"
+                        INSERT INTO tasks (
+                            desc,
+                            prio,
+                            date, 
+                            due, 
+                            project,
+                            status,
+                            isCompleted
+                        )
+                        VALUES(
+                            $Desc,
+                            $Prio,
+                            $Date,
+                            $Due,
+                            $Project,
+                            $Status,
+                            $IsCompleted
+                        );
+                        select last_insert_rowid();
+                        ";
+
+                        command.Parameters.AddWithValue("$Desc", task.Desc);
+                        command.Parameters.AddWithValue("$Date", task.Date.ToString());
+                        command.Parameters.AddWithValue("$Due", task.Due.ToString());
+                        command.Parameters.AddWithValue("$Prio", task.Prio.Value);
+                        command.Parameters.AddWithValue("$Project", task.Project);
+                        command.Parameters.AddWithValue("$Status", task.Status.ToString());
+                        command.Parameters.AddWithValue("$IsCompleted", task.IsCompleted.ToString());
+
+                        insertedId = (long?)(command.ExecuteScalar());
+
+                        if (insertedId == null)
+                        {
+                            throw new DBException("Insertion failed, no row id");
+                        }
+
+                        transaction.Commit();
+
+
+                    } catch (Exception e)
+                    {
+                        if ( !( e is DBException ) )
+                        {
+                            transaction.Rollback();
+                            Console.WriteLine(e);
+                            System.Environment.Exit(1);
+                        }
+                    }
                 }
-                return insertedTask;
+                if (insertedId != null) { insertedTask = GetTask((long)insertedId); }
             }
+            
+            return insertedTask;
         }
 
         public static Task? GetTask(long id)
         {
-            Task? task;
+            Task? task = null;
 
             using (SqliteConnection conn = new SqliteConnection(connString))
             {
@@ -111,38 +141,24 @@ namespace RemindMe
                 using (var transaction = conn.BeginTransaction())
                 {
                     var command = conn.CreateCommand();
-                    command.CommandText =
+                    command.CommandText = selectAllFieldsFromTasks +
                     @"
-                        SELECT desc, prio, date, due, status, project, id FROM tasks
                         WHERE id = $id;
                     ";
                     command.Parameters.AddWithValue("$id", id);
 
                     var reader = command.ExecuteReader();
 
-                    if (!reader.Read())
+                    IEnumerable<Task> tasks = ReaderToTaskList(reader);
+
+                    if (tasks.Count() > 1)
                     {
                         transaction.Rollback();
-                        return null;
-                    }
-
-                    task = new Task(
-                        reader.GetString(0), // desc
-                        reader.GetInt32(1), // prio
-                        reader.GetDateTime(2), // date
-                        reader.GetDateTime(3), // due
-                        reader.GetString(5), // project
-                        reader.GetInt64(6), // Id,
-                        new TaskStatus(reader.GetString(4)) // Status
-                    );
-
-                    if (reader.Read())
-                    {
-                        transaction.Rollback();
-                        throw new Exception("GetTask(id) returned multiple rows");
+                        throw new Exception("GetTask(id) returned more than one row");
                     }
 
                     transaction.Commit();
+                    task = tasks.FirstOrDefault();
                 }
             }
             return task;
@@ -156,9 +172,8 @@ namespace RemindMe
                 using (var transaction = conn.BeginTransaction())
                 {
                     var command = conn.CreateCommand();
-                    command.CommandText =
+                    command.CommandText = selectAllFieldsFromTasks +
                     @"
-                        SELECT desc, prio, date, due, status, project, id FROM tasks
                         WHERE desc LIKE $desc;
                     ";
 
@@ -166,7 +181,7 @@ namespace RemindMe
 
                     var reader = command.ExecuteReader();
 
-                    return ReaderToTaskList(reader).ToList();
+                    return ReaderToTaskList(reader);
                 }
             }
         }
@@ -178,27 +193,29 @@ namespace RemindMe
                 conn.Open();
                 using (var transaction = conn.BeginTransaction())
                 {
+                    bool firstCondition = true;
+
                     var command = conn.CreateCommand();
-                    command.CommandText =
-                    @"
-                        SELECT desc, prio, date, due, status, project, id FROM tasks
-                    ";
+                    command.CommandText = selectAllFieldsFromTasks;
 
                     if (desc != null)
                     {
+                        firstCondition = false;
                         command.CommandText += "WHERE desc LIKE $desc";
                         command.Parameters.AddWithValue("$desc", '%' + desc + '%');
                     }
 
                     if (max != null)
                     {
-                        command.CommandText += " AND prio <= $max";
+                        firstCondition = false;
+                        command.CommandText += firstCondition ? "WHERE " : " AND " + "prio <= $max";
                         command.Parameters.AddWithValue("$max", max.Value);
                     }
 
                     if (min != null)
                     {
-                        command.CommandText += " AND prio >= $min";
+                        firstCondition = false;
+                        command.CommandText += firstCondition ? "WHERE " : " AND " + "prio >= $min";
                         command.Parameters.AddWithValue("$min", min.Value);
                     }
 
@@ -224,11 +241,25 @@ namespace RemindMe
                         reader.GetDateTime(3), // due
                         reader.GetString(5), // project
                         reader.GetInt64(6), // Id,
-                        new TaskStatus(reader.GetString(4)) // Status
+                        reader.GetString(4), // Status
+                        bool.Parse(reader.GetString(7)) // IsCompleted
                         ));
             }
 
             return result;
+        }
+    }
+
+    class DBException : Exception
+    {
+        public DBException(string message) : base(message)
+        {
+
+        }
+
+        public DBException() : base()
+        {
+
         }
     }
 }

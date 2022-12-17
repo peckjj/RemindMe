@@ -12,12 +12,15 @@ namespace RemindMe
         static string? command = null;
 
         static bool verbose = false;
+        static bool complete = false;
         static long? id = null;
         static string[] data = new string[] { };
 
         static Priority? priority = null;
         static Priority? minPrio = null;
         static Priority? maxPrio = null;
+
+        static bool ignoreCompleted = false;
         static void Main(string[] args)
         {
 
@@ -41,12 +44,20 @@ namespace RemindMe
                     {
                         if (val != null)
                         {
-                            id = long.Parse(val);
+                            try
+                            {
+                                id = long.Parse(val);
+                            } catch (FormatException e)
+                            {
+                                Console.WriteLine("id must be an integer value, cannot accept \"" + val + "\"");
+                                Usage();
+                                System.Environment.Exit(1);
+                            }
                         } else
                         {
                             Console.WriteLine("No id given.");
                             Usage();
-                            System.Environment.Exit(0);
+                            System.Environment.Exit(1);
                         }
                     },
                     "Filter by a specific task <ID>. Returns only one result",
@@ -63,7 +74,7 @@ namespace RemindMe
                         {
                             Console.WriteLine("No priority given.");
                             Usage();
-                            System.Environment.Exit(0);
+                            System.Environment.Exit(1);
                         }
                     },
                     "Filter tasks by a given priority",
@@ -80,14 +91,14 @@ namespace RemindMe
                             if (maxPrio != null && minPrio > maxPrio)
                             {
                                 Console.WriteLine("Maximum priority cannot be less than Minimum priority.");
-                                System.Environment.Exit(0);
+                                System.Environment.Exit(1);
                             }
 
                         } else
                         {
                             Console.WriteLine("No minimum priority given.");
                             Usage();
-                            System.Environment.Exit(0);
+                            System.Environment.Exit(1);
                         }
                     },
                     "Filter tasks by a minimum priority, inclusively.",
@@ -104,13 +115,13 @@ namespace RemindMe
                             if (minPrio != null && maxPrio < minPrio)
                             {
                                 Console.WriteLine("Maximum priority cannot be less than Minimum priority.");
-                                System.Environment.Exit(0);
+                                System.Environment.Exit(1);
                             }
                         } else
                         {
                             Console.WriteLine("No maximum priority given.");
                             Usage();
-                            System.Environment.Exit(0);
+                            System.Environment.Exit(1);
                         }
                     },
                     "Filter tasks by a given maximum priority, inclusively.",
@@ -123,6 +134,11 @@ namespace RemindMe
                         Usage();
                         System.Environment.Exit(0);
                     }
+                    ),
+                new ArgParseOption (
+                    new string[] {"--complete", "-c"},
+                    val => complete = true,
+                    "Marks a task as completed, or filters by complete tasks, which are normally hidden"
                     )
             };
             try
@@ -134,7 +150,7 @@ namespace RemindMe
                 {
                     Console.WriteLine(e.Message);
                     Usage();
-                    return;
+                    System.Environment.Exit(1);
                 }
             }
 
@@ -142,6 +158,12 @@ namespace RemindMe
             {
                 Usage();
                 return;
+            }
+
+            if (!File.Exists(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/reminders.db"))
+            {
+                Console.WriteLine("Database does not exist, creating reminders.db");
+                Database.CreateDb();
             }
 
             if (command == CommandConstants.ADD)
@@ -153,15 +175,9 @@ namespace RemindMe
                     return;
                 }
 
-                if (!File.Exists(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/reminders.db"))
-                {
-                    Console.WriteLine("Database does not exist, creating reminders.db");
-                    Database.CreateDb();
-                }
-
                 // Allows for shorthand, you can add a task without quotes
                 Task? task = Database.AddTask(new Task(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur),
-                                                       new Priority(priority != null ? priority.Value : PriorityConstants.MED)));
+                                                       new Priority(priority != null ? priority.Value : PriorityConstants.MED), complete));
 
                 if (task != null)
                 {
@@ -184,6 +200,14 @@ namespace RemindMe
                 if (id != null)
                 {
                     tasks = new Task?[] { Database.GetTask((long)id) };
+
+                    if (tasks[0] == null)
+                    {
+                        Console.WriteLine( String.Format("No tasks with ID: {0} found", id) );
+                        return;
+                    }
+
+                    ignoreCompleted = true;
                 } else if (priority != null || minPrio != null || maxPrio != null)
                 {
                     if (priority != null)
@@ -210,20 +234,22 @@ namespace RemindMe
 
         static void DisplayTasks(Task?[]? tasks)
         {
-            if (tasks == null || tasks.Length < 1) { Console.WriteLine("No tasks found."); return; }
-            if (verbose) { Console.WriteLine(String.Format("{0} tasks found:", tasks.Length)); }
-            foreach (Task? task in tasks)
+            Task?[] filteredTasks = new Task?[] { };
+
+            filteredTasks = tasks != null ? tasks.Where( t => t != null && (t.IsCompleted == complete || ignoreCompleted) ).ToArray() : new Task?[] { };
+
+            if (filteredTasks.Length < 1) { Console.WriteLine("No tasks found."); return; }
+
+            if (verbose) { Console.WriteLine(String.Format("{0} tasks found:", filteredTasks.Length)); }
+            foreach (Task? task in filteredTasks)
             {
-                if (task != null)
-                {
-                    Console.WriteLine(String.Format("{0}:\t{1}\t{2}", task.Id, task.Desc, task.Prio));
-                }
+                Console.WriteLine(String.Format("{0}:\t{1}\t{2}", task.Id, task.Desc, task.Prio));
             }
         }
 
         static void Usage()
         {
-            Console.WriteLine("Usage: <Command> [opts]\nCommands:");
+            Console.WriteLine("Usage: reme <Command> [opts]\nCommands:");
             Console.WriteLine("\nadd <task> [opts]:\t\tAdds a new task to the list");
             Console.WriteLine("get <task> [opts]:\t\tGets a list of tasks. [opts] can be used to apply filters. <task> will be used to search for similar tasks");
             if (options == null)
@@ -238,7 +264,7 @@ namespace RemindMe
                 if (option.desc != null)
                 {
                     Console.WriteLine(String.Format("\n{0}{1}:\t\t{2}", option.aliases[0].Replace("=", ""), 
-                                                                        option.paramDesc == null ? "" : " " + option.paramDesc + " ", 
+                                                                        option.optParam == null ? "" : " " + option.optParam + " ", 
                                                                         option.desc));
                     foreach (string alias in option.aliases.Skip(1))
                     {
