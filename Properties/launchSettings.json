@@ -26,6 +26,10 @@
     "get with prio": {
       "commandName": "Project",
       "commandLineArgs": "get task -p 5"
+    },
+    "bug": {
+      "commandName": "Project",
+      "commandLineArgs": "get -id"
     }
   }
 }
