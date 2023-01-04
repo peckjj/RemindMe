@@ -289,7 +289,13 @@ namespace RemindMe
                 task.IsCompleted = complete | task.IsCompleted;
                 task = Database.UpdateTask(task);
 
-                DisplayTasks(new Task?[] { task });
+                if (verbose)
+                {
+                    ignoreCompleted = true;
+                    DisplayTasks(new Task?[] { task });
+                }
+
+
             }
             else
             {
