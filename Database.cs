@@ -12,7 +12,8 @@ namespace RemindMe
         private static string connString = "Data Source=" +
                                            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) +
                                            "/reminders.db";
-        private static string selectAllFieldsFromTasks = "SELECT desc, prio, date, due, status, project, id, isCompleted FROM tasks "; 
+        private static string allFieldsFromTasks = "desc, prio, date, due, status, project, id, isCompleted";
+        private static string selectAllFieldsFromTasks = "SELECT " + allFieldsFromTasks + " FROM tasks ";
         internal static void CreateDb()
         {
             using (SqliteConnection connection = new SqliteConnection(connString)
@@ -226,6 +227,62 @@ namespace RemindMe
                     return ReaderToTaskList(reader);
                 }
             }
+        }
+
+        public static Task? UpdateTask(Task task)
+        {
+            Task? result = null;
+
+            if (task.Id == null)
+            {
+                throw new DBException("Task id must be provided to modify.");
+            }
+
+            using (SqliteConnection conn = new SqliteConnection(connString))
+            {
+                conn.Open();
+                using (var transaction = conn.BeginTransaction())
+                {
+                    var command = conn.CreateCommand();
+
+                    command.CommandText = @"UPDATE tasks SET
+                                                desc = $Desc,
+                                                prio = $Prio,
+                                                date = $Date, 
+                                                due  = $Due, 
+                                                project = $Project,
+                                                status = $Status,
+                                                isCompleted = $isCompleted
+                                            WHERE id = $Id
+                                           ";
+
+                    command.Parameters.AddWithValue("$Desc", task.Desc);
+                    command.Parameters.AddWithValue("$Prio", task.Prio.Value);
+                    command.Parameters.AddWithValue("$Date", task.Date.ToString());
+                    command.Parameters.AddWithValue("$Due", task.Due.ToString());
+                    command.Parameters.AddWithValue("$Project", task.Project);
+                    command.Parameters.AddWithValue("$Status", task.Status);
+                    command.Parameters.AddWithValue("$isCompleted", task.IsCompleted.ToString());
+                    command.Parameters.AddWithValue("$Id", task.Id);
+
+                    try
+                    {
+                        if (command.ExecuteNonQuery() != 1)
+                        {
+                            throw new DBException("More than 1 task would be modified.");
+                        }
+                        transaction.Commit();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.Message);
+                        transaction.Rollback();
+                        Console.WriteLine("No modifications to DB were made.");
+                        System.Environment.Exit(1);
+                    }
+                }
+            }
+            return GetTask((long)task.Id);
         }
 
         private static IEnumerable<Task> ReaderToTaskList(SqliteDataReader reader)

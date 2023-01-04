@@ -29,7 +29,7 @@
     },
     "bug": {
       "commandName": "Project",
-      "commandLineArgs": "get -id"
+      "commandLineArgs": "add thi2s is a new task that I wanted to add but it uses get in its desc"
     }
   }
 }

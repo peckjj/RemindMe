@@ -27,8 +27,23 @@ namespace RemindMe
             options = new ArgParseOption[]
             {
                 new ArgParseOption (
-                    new string[]{CommandConstants.ADD, CommandConstants.GET},
-                    val => command = val,
+                    CommandConstants.ADD.Concat(CommandConstants.GET).Concat(CommandConstants.MODIFY).ToArray(),
+                    val =>
+                    {
+                        if (val == null)
+                        {
+                            return;
+                        }
+
+                        if (command == null)
+                        {
+                            command = val;
+                        } else
+                        {
+                            Console.WriteLine(String.Format("Discovered the command '{0}' in the description. Please use quotes for descriptions which include command aliases.", val));
+                            System.Environment.Exit(1);
+                        }
+                    },
                     null,
                     null,
                     passArgToLambda: true
@@ -166,7 +181,11 @@ namespace RemindMe
                 Database.CreateDb();
             }
 
-            if (command == CommandConstants.ADD)
+            /**
+             * ADD Command
+             */
+
+            if (CommandConstants.ADD.Contains(command))
             // Add task to DB
             {
                 if (data.Length < 1)
@@ -192,7 +211,13 @@ namespace RemindMe
                 }
 
                 return;
-            } else if (command == CommandConstants.GET)
+
+                /**
+                * GET Command
+                */
+
+            }
+            else if ( CommandConstants.GET.Contains(command) )
             // Get tasks from DB and display
             {
                 Task?[] tasks;
@@ -224,6 +249,47 @@ namespace RemindMe
                 }
 
                 DisplayTasks(tasks);
+
+                /**
+                * MODIFY Command
+                */
+
+            }
+            else if (CommandConstants.MODIFY.Contains(command))
+            {
+                if (id == null)
+                {
+                    Console.Write("ID of task must be given when using the 'modify' command");
+                    Usage();
+                    System.Environment.Exit(1);
+                }
+
+                string desc = "";
+
+                if (data.Length > 0)
+                {
+                    desc = data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur);
+                }
+
+
+                Task? task = Database.GetTask((long)id);
+
+                if (task == null)
+                {
+                    Console.Write( String.Format("No task with id {0} found", id) );
+                    System.Environment.Exit(1);
+                }
+
+                task.Desc = desc == "" ? task.Desc : desc;
+                task.Prio = priority == null ? task.Prio : priority;
+                //task.Date = ... No option for Date yet. TODO: Need to add a lastModified field?
+                //task.Due = ... No option for setting Due date yet.
+                //task.Project = ... No option for setting Project yet.
+                //task.Status = ... No option for setting Status yet.
+                task.IsCompleted = complete | task.IsCompleted;
+                task = Database.UpdateTask(task);
+
+                DisplayTasks(new Task?[] { task });
             }
             else
             {
@@ -252,6 +318,7 @@ namespace RemindMe
             Console.WriteLine("Usage: reme <Command> [opts]\nCommands:");
             Console.WriteLine("\nadd <task> [opts]:\t\tAdds a new task to the list");
             Console.WriteLine("get <task> [opts]:\t\tGets a list of tasks. [opts] can be used to apply filters. <task> will be used to search for similar tasks");
+            Console.WriteLine("mod|modify <task> [opts]:\tModifies a task with a given ID. The --id option must be provided. Overwrites Task description with <task> and other fields for provided [opts].");
             if (options == null)
             {
                 return;
