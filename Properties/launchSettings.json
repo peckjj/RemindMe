@@ -15,10 +15,6 @@
       "commandName": "Project",
       "commandLineArgs": "add \"This is a new task\" --verbose -v -verbose"
     },
-    "get with args": {
-      "commandName": "Project",
-      "commandLineArgs": "get \"a new\" --verbose -v -verbose"
-    },
     "add no quotes": {
       "commandName": "Project",
       "commandLineArgs": "add This is a new task"
@@ -30,6 +26,11 @@
     "bug": {
       "commandName": "Project",
       "commandLineArgs": "add thi2s is a new task that I wanted to add but it uses get in its desc"
+    },
+    "get": {
+      "commandName": "Project",
+      "commandLineArgs": "get \" \"",
+      "workingDirectory": "C:\\Users\\pecki\\Home\\Code\\RemindMe\\RemindMe\\bin\\Debug\\net6.0\\runtimes"
     }
   }
 }
