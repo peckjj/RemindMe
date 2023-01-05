@@ -1,5 +1,7 @@
-﻿using RemindMe.Constants;
+﻿using DataTablePrettyPrinter;
+using RemindMe.Constants;
 using RemindMe.Models;
+using System.Data;
 using System.Reflection;
 using Task = RemindMe.Models.Task;
 
@@ -13,6 +15,7 @@ namespace RemindMe
         static bool verbose = false;
         static bool complete = false;
         static long? id = null;
+        static int taskWidth = -1;
         static string[] data = Array.Empty<string>();
 
         static Priority? priority = null;
@@ -64,13 +67,13 @@ namespace RemindMe
                             } catch (FormatException)
                             {
                                 Console.WriteLine("id must be an integer value, cannot accept \"" + val + "\"");
-                                Usage();
+                                UsageLite();
                                 System.Environment.Exit(1);
                             }
                         } else
                         {
                             Console.WriteLine("No id given.");
-                            Usage();
+                            UsageLite();
                             System.Environment.Exit(1);
                         }
                     },
@@ -87,7 +90,7 @@ namespace RemindMe
                         } else
                         {
                             Console.WriteLine("No priority given.");
-                            Usage();
+                            UsageLite();
                             System.Environment.Exit(1);
                         }
                     },
@@ -111,7 +114,7 @@ namespace RemindMe
                         } else
                         {
                             Console.WriteLine("No minimum priority given.");
-                            Usage();
+                            UsageLite();
                             System.Environment.Exit(1);
                         }
                     },
@@ -134,7 +137,7 @@ namespace RemindMe
                         } else
                         {
                             Console.WriteLine("No maximum priority given.");
-                            Usage();
+                            UsageLite();
                             System.Environment.Exit(1);
                         }
                     },
@@ -153,6 +156,31 @@ namespace RemindMe
                     new string[] {"--complete", "-c"},
                     val => complete = true,
                     "Marks a task as completed, or filters by complete tasks, which are normally hidden"
+                    ),
+                new ArgParseOption (
+                    new string[] {"--taskWidth=", "-w="},
+                    val => {
+                    if (val != null)
+                        {
+                            try
+                            {
+                                taskWidth = int.Parse(val);
+                            } catch (FormatException)
+                            {
+                                Console.WriteLine("Task Width must be given as integer character length.");
+                                UsageLite();
+                                System.Environment.Exit(1);
+                            }
+
+                            if (taskWidth < 1)
+                            {
+                                Console.WriteLine("Task Width must be a positive non-zero integer.");
+                                UsageLite();
+                                System.Environment.Exit(1);
+                            }
+                        }
+                    },
+                    "Overrides default maximum length for displaying task descriptions."
                     )
             };
             try
@@ -164,14 +192,14 @@ namespace RemindMe
                 if (e is ArgParseNoMatchException || e is ArgParseNoValueException)
                 {
                     Console.WriteLine(e.Message);
-                    Usage();
+                    UsageLite();
                     System.Environment.Exit(1);
                 }
             }
 
             if (command == null)
             {
-                Usage();
+                UsageLite();
                 return;
             }
 
@@ -190,7 +218,7 @@ namespace RemindMe
             {
                 if (data.Length < 1)
                 {
-                    Usage();
+                    UsageLite();
                     return;
                 }
 
@@ -263,7 +291,7 @@ namespace RemindMe
                 if (id == null)
                 {
                     Console.Write("ID of task must be given when using the 'modify' command");
-                    Usage();
+                    UsageLite();
                     System.Environment.Exit(1);
                 }
 
@@ -302,7 +330,7 @@ namespace RemindMe
             }
             else
             {
-                Usage();
+                UsageLite();
             }
 
         }
@@ -315,22 +343,84 @@ namespace RemindMe
 
             if (filteredTasks.Length < 1) { Console.WriteLine("No tasks found."); return; }
 
-            if (verbose) { Console.WriteLine(String.Format("{0} tasks found:", filteredTasks.Length)); }
-            foreach (Task? task in filteredTasks)
+            Console.WriteLine(
+                (verbose ? VerboseTable(filteredTasks) : SimpleTable(filteredTasks)).ToPrettyPrintedString()
+            );
+        }
+
+        static DataTable SimpleTable(Task?[] tasks)
+        {
+            DataTable table = new(string.Format("Found {0} tasks", tasks.Length));
+
+            table.Columns.Add("ID", typeof(long));
+            table.Columns.Add("Task", typeof(string));
+            table.Columns.Add("Due", typeof(DateTime));
+            table.Columns.Add("Prio", typeof(int));
+            table.Columns.Add("Project", typeof(string));
+
+            table.Columns[1].SetWidth(taskWidth > 0 ? taskWidth : DisplayConstants.TASK_DISPLAY_WIDTH);
+
+            table.Columns[2].SetDataTextFormat((DataColumn c, DataRow r) =>
+            {
+                DateTime date = r.Field<DateTime>(c);
+
+                return date.ToShortDateString();
+            });
+
+            foreach (Task? task in tasks)
             {
                 if (task != null)
                 {
-                    Console.WriteLine(string.Format("{0}:\t{1}\t{2}", task.Id, task.Desc, task.Prio));
+                    table.Rows.Add(task.Id, task.Desc, task.Due, task.Prio.Value, task.Project);
                 }
             }
+
+            return table;
         }
 
-        static void Usage()
+        static DataTable VerboseTable(Task?[] tasks)
+        {
+            DataTable table = new(string.Format("Found {0} tasks", tasks.Length));
+
+            table.Columns.Add("ID", typeof(long));
+            table.Columns.Add("Task", typeof(string));
+            table.Columns.Add("Due", typeof(DateTime));
+            table.Columns.Add("Prio", typeof(int));
+            table.Columns.Add("Project", typeof(string));
+            table.Columns.Add("Date", typeof(DateTime));
+            table.Columns.Add("Status", typeof(string));
+            table.Columns.Add("Completed", typeof(bool));
+
+            if (taskWidth > 0)
+            {
+                table.Columns[1].SetWidth(taskWidth);
+            }
+
+            foreach (Task? task in tasks)
+            {
+                if (task != null)
+                {
+                    table.Rows.Add(task.Id, task.Desc, task.Due, task.Prio.Value, task.Project, task.Date, task.Status, task.IsCompleted);
+                }
+            }
+
+            return table;
+        }
+
+        static void UsageLite()
         {
             Console.WriteLine("Usage: reme <Command> [opts]\nCommands:");
             Console.WriteLine("\nadd <task> [opts]:\t\tAdds a new task to the list");
             Console.WriteLine("get <task> [opts]:\t\tGets a list of tasks. [opts] can be used to apply filters. <task> will be used to search for similar tasks");
             Console.WriteLine("mod|modify <task> [opts]:\tModifies a task with a given ID. The --id option must be provided. Overwrites Task description with <task> and other fields for provided [opts].");
+
+            Console.WriteLine("\nType 'reme -h' to view detailed options.\n");
+        }
+
+        static void Usage()
+        {
+            UsageLite();
+
             if (options == null)
             {
                 return;
