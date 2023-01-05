@@ -1,7 +1,7 @@
 ﻿using Microsoft.Data.Sqlite;
-using Task = RemindMe.Models.Task;
 using RemindMe.Models;
 using System.Reflection;
+using Task = RemindMe.Models.Task;
 
 namespace RemindMe
 {
@@ -9,20 +9,18 @@ namespace RemindMe
     {
         private static readonly string dbVersion = "0.1";
 
-        private static string connString = "Data Source=" +
+        private static readonly string connString = "Data Source=" +
                                            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) +
                                            "/reminders.db";
-        private static string allFieldsFromTasks = "desc, prio, date, due, status, project, id, isCompleted";
-        private static string selectAllFieldsFromTasks = "SELECT " + allFieldsFromTasks + " FROM tasks ";
+        private static readonly string allFieldsFromTasks = "desc, prio, date, due, status, project, id, isCompleted";
+        private static readonly string selectAllFieldsFromTasks = "SELECT " + allFieldsFromTasks + " FROM tasks ";
         internal static void CreateDb()
         {
-            using (SqliteConnection connection = new SqliteConnection(connString)
-                  )
-            {
-                connection.Open();
+            using SqliteConnection connection = new(connString);
+            connection.Open();
 
-                // Create tasks table
-                string createTables = @"
+            // Create tasks table
+            string createTables = @"
                 CREATE TABLE ""tasks"" (
 	                ""id""	        INTEGER,
 	                ""desc""	    TEXT NOT NULL,
@@ -48,24 +46,23 @@ namespace RemindMe
                 )
                 ;";
 
-                var command = connection.CreateCommand();
-                command.CommandText = createTables;
+            var command = connection.CreateCommand();
+            command.CommandText = createTables;
 
-                command.Parameters.AddWithValue("$dbVersion", dbVersion);
-                command.Parameters.AddWithValue("createdOn", DateTime.Now.ToString());
-                command.Parameters.AddWithValue("updatedOn", DateTime.Now.ToString());
+            command.Parameters.AddWithValue("$dbVersion", dbVersion);
+            command.Parameters.AddWithValue("createdOn", DateTime.Now.ToString());
+            command.Parameters.AddWithValue("updatedOn", DateTime.Now.ToString());
 
-                command.ExecuteNonQuery();
+            command.ExecuteNonQuery();
 
-                return;
-            }
+            return;
         }
         public static Task? AddTask(Task task)
         {
             Task? insertedTask = null;
             long? insertedId = null;
 
-            using (SqliteConnection conn = new SqliteConnection(connString))
+            using (SqliteConnection conn = new(connString))
             {
                 conn.Open();
                 using (var transaction = conn.BeginTransaction())
@@ -116,9 +113,10 @@ namespace RemindMe
                         transaction.Commit();
 
 
-                    } catch (Exception e)
+                    }
+                    catch (Exception e)
                     {
-                        if ( !( e is DBException ) )
+                        if (e is not DBException)
                         {
                             transaction.Rollback();
                             Console.WriteLine(e);
@@ -128,7 +126,7 @@ namespace RemindMe
                 }
                 if (insertedId != null) { insertedTask = GetTask((long)insertedId); }
             }
-            
+
             return insertedTask;
         }
 
@@ -136,116 +134,103 @@ namespace RemindMe
         {
             Task? task = null;
 
-            using (SqliteConnection conn = new SqliteConnection(connString))
+            using (SqliteConnection conn = new(connString))
             {
                 conn.Open();
-                using (var transaction = conn.BeginTransaction())
-                {
-                    var command = conn.CreateCommand();
-                    command.CommandText = selectAllFieldsFromTasks +
-                    @"
+                using var transaction = conn.BeginTransaction();
+                var command = conn.CreateCommand();
+                command.CommandText = selectAllFieldsFromTasks +
+                @"
                         WHERE id = $id;
                     ";
-                    command.Parameters.AddWithValue("$id", id);
+                command.Parameters.AddWithValue("$id", id);
 
-                    var reader = command.ExecuteReader();
+                var reader = command.ExecuteReader();
 
-                    IEnumerable<Task> tasks = ReaderToTaskList(reader);
+                IEnumerable<Task> tasks = ReaderToTaskList(reader);
 
-                    if (tasks.Count() > 1)
-                    {
-                        transaction.Rollback();
-                        throw new Exception("GetTask(id) returned more than one row");
-                    }
-
-                    transaction.Commit();
-                    task = tasks.FirstOrDefault();
+                if (tasks.Count() > 1)
+                {
+                    transaction.Rollback();
+                    throw new Exception("GetTask(id) returned more than one row");
                 }
+
+                transaction.Commit();
+                task = tasks.FirstOrDefault();
             }
             return task;
         }
 
         public static IEnumerable<Task> GetTaskByDesc(string desc)
         {
-            using (SqliteConnection conn = new SqliteConnection(connString))
-            {
-                conn.Open();
-                using (var transaction = conn.BeginTransaction())
-                {
-                    var command = conn.CreateCommand();
-                    command.CommandText = selectAllFieldsFromTasks +
-                    @"
+            using SqliteConnection conn = new(connString);
+            conn.Open();
+            using SqliteTransaction transaction = conn.BeginTransaction();
+            var command = conn.CreateCommand();
+            command.CommandText = selectAllFieldsFromTasks +
+            @"
                         WHERE desc LIKE $desc;
                     ";
 
-                    command.Parameters.AddWithValue("$desc", '%' + desc + '%');
+            command.Parameters.AddWithValue("$desc", '%' + desc + '%');
 
-                    var reader = command.ExecuteReader();
+            var reader = command.ExecuteReader();
 
-                    return ReaderToTaskList(reader);
-                }
-            }
+            return ReaderToTaskList(reader);
         }
 
-        public static IEnumerable<Task> GetTaskByPrio(string? desc, Priority? max, Priority? min = null) 
+        public static IEnumerable<Task> GetTaskByPrio(string? desc, Priority? max, Priority? min = null)
         {
-            using (SqliteConnection conn = new SqliteConnection(connString))
+            using SqliteConnection conn = new(connString);
+            conn.Open();
+            using var transaction = conn.BeginTransaction();
+            bool firstCondition = true;
+
+            var command = conn.CreateCommand();
+            command.CommandText = selectAllFieldsFromTasks;
+
+            if (desc != null)
             {
-                conn.Open();
-                using (var transaction = conn.BeginTransaction())
-                {
-                    bool firstCondition = true;
-
-                    var command = conn.CreateCommand();
-                    command.CommandText = selectAllFieldsFromTasks;
-
-                    if (desc != null)
-                    {
-                        firstCondition = false;
-                        command.CommandText += "WHERE desc LIKE $desc";
-                        command.Parameters.AddWithValue("$desc", '%' + desc + '%');
-                    }
-
-                    if (max != null)
-                    {
-                        firstCondition = false;
-                        command.CommandText += firstCondition ? "WHERE " : " AND " + "prio <= $max";
-                        command.Parameters.AddWithValue("$max", max.Value);
-                    }
-
-                    if (min != null)
-                    {
-                        firstCondition = false;
-                        command.CommandText += firstCondition ? "WHERE " : " AND " + "prio >= $min";
-                        command.Parameters.AddWithValue("$min", min.Value);
-                    }
-
-                    command.CommandText += ';';
-
-                    var reader = command.ExecuteReader();
-
-                    return ReaderToTaskList(reader);
-                }
+                firstCondition = false;
+                command.CommandText += "WHERE desc LIKE $desc";
+                command.Parameters.AddWithValue("$desc", '%' + desc + '%');
             }
+
+            if (max != null)
+            {
+                firstCondition = false;
+                command.CommandText += firstCondition ? "WHERE " : " AND " + "prio <= $max";
+                command.Parameters.AddWithValue("$max", max.Value);
+            }
+
+            if (min != null)
+            {
+                firstCondition = false;
+                command.CommandText += firstCondition ? "WHERE " : " AND " + "prio >= $min";
+                command.Parameters.AddWithValue("$min", min.Value);
+            }
+
+            command.CommandText += ';';
+
+            var reader = command.ExecuteReader();
+
+            return ReaderToTaskList(reader);
         }
 
         public static Task? UpdateTask(Task task)
         {
-            Task? result = null;
-
             if (task.Id == null)
             {
                 throw new DBException("Task id must be provided to modify.");
             }
 
-            using (SqliteConnection conn = new SqliteConnection(connString))
+            using (SqliteConnection conn = new(connString))
             {
                 conn.Open();
-                using (var transaction = conn.BeginTransaction())
-                {
-                    var command = conn.CreateCommand();
+                using var transaction = conn.BeginTransaction();
+                var command = conn.CreateCommand();
 
-                    command.CommandText = @"UPDATE tasks SET
+                command.CommandText = @"UPDATE tasks SET
                                                 desc = $Desc,
                                                 prio = $Prio,
                                                 date = $Date, 
@@ -256,30 +241,29 @@ namespace RemindMe
                                             WHERE id = $Id
                                            ";
 
-                    command.Parameters.AddWithValue("$Desc", task.Desc);
-                    command.Parameters.AddWithValue("$Prio", task.Prio.Value);
-                    command.Parameters.AddWithValue("$Date", task.Date.ToString());
-                    command.Parameters.AddWithValue("$Due", task.Due.ToString());
-                    command.Parameters.AddWithValue("$Project", task.Project);
-                    command.Parameters.AddWithValue("$Status", task.Status);
-                    command.Parameters.AddWithValue("$isCompleted", task.IsCompleted.ToString());
-                    command.Parameters.AddWithValue("$Id", task.Id);
+                command.Parameters.AddWithValue("$Desc", task.Desc);
+                command.Parameters.AddWithValue("$Prio", task.Prio.Value);
+                command.Parameters.AddWithValue("$Date", task.Date.ToString());
+                command.Parameters.AddWithValue("$Due", task.Due.ToString());
+                command.Parameters.AddWithValue("$Project", task.Project);
+                command.Parameters.AddWithValue("$Status", task.Status);
+                command.Parameters.AddWithValue("$isCompleted", task.IsCompleted.ToString());
+                command.Parameters.AddWithValue("$Id", task.Id);
 
-                    try
+                try
+                {
+                    if (command.ExecuteNonQuery() != 1)
                     {
-                        if (command.ExecuteNonQuery() != 1)
-                        {
-                            throw new DBException("More than 1 task would be modified.");
-                        }
-                        transaction.Commit();
+                        throw new DBException("More than 1 task would be modified.");
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(ex.Message);
-                        transaction.Rollback();
-                        Console.WriteLine("No modifications to DB were made.");
-                        System.Environment.Exit(1);
-                    }
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    transaction.Rollback();
+                    Console.WriteLine("No modifications to DB were made.");
+                    System.Environment.Exit(1);
                 }
             }
             return GetTask((long)task.Id);

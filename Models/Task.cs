@@ -1,9 +1,4 @@
 ﻿using RemindMe.Constants;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace RemindMe.Models
 {
@@ -18,8 +13,8 @@ namespace RemindMe.Models
         public string Status { get; set; }
         public bool IsCompleted { get; set; }
         public Task(string v) : this(v, null, null, null, null, null, "active", false)
-        {   
-            
+        {
+
         }
 
         public Task(string v, Priority prio) : this(v, prio, false)

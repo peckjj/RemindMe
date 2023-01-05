@@ -1,20 +1,19 @@
-﻿using RemindMe.Models;
-using RemindMe.Constants;
-using Microsoft.Data.Sqlite;
-using Task = RemindMe.Models.Task;
+﻿using RemindMe.Constants;
+using RemindMe.Models;
 using System.Reflection;
+using Task = RemindMe.Models.Task;
 
 namespace RemindMe
 {
     internal class RemindMe
     {
-        static ArgParseOption[] options = { };
+        static ArgParseOption[] options = Array.Empty<ArgParseOption>();
         static string? command = null;
 
         static bool verbose = false;
         static bool complete = false;
         static long? id = null;
-        static string[] data = new string[] { };
+        static string[] data = Array.Empty<string>();
 
         static Priority? priority = null;
         static Priority? minPrio = null;
@@ -62,7 +61,7 @@ namespace RemindMe
                             try
                             {
                                 id = long.Parse(val);
-                            } catch (FormatException e)
+                            } catch (FormatException)
                             {
                                 Console.WriteLine("id must be an integer value, cannot accept \"" + val + "\"");
                                 Usage();
@@ -159,7 +158,8 @@ namespace RemindMe
             try
             {
                 data = ArgParse.ParseArgs(options, args).ToArray();
-            } catch (ArgParseException e)
+            }
+            catch (ArgParseException e)
             {
                 if (e is ArgParseNoMatchException || e is ArgParseNoValueException)
                 {
@@ -202,10 +202,11 @@ namespace RemindMe
                 {
                     if (verbose)
                     {
-                    Console.WriteLine("Created new Task");
+                        Console.WriteLine("Created new Task");
                     }
                     DisplayTasks(new Task[] { task });
-                } else
+                }
+                else
                 {
                     Console.WriteLine("Task insertion failed.");
                 }
@@ -217,7 +218,7 @@ namespace RemindMe
                 */
 
             }
-            else if ( CommandConstants.GET.Contains(command) )
+            else if (CommandConstants.GET.Contains(command))
             // Get tasks from DB and display
             {
                 Task?[] tasks;
@@ -228,17 +229,19 @@ namespace RemindMe
 
                     if (tasks[0] == null)
                     {
-                        Console.WriteLine( String.Format("No tasks with ID: {0} found", id) );
+                        Console.WriteLine(String.Format("No tasks with ID: {0} found", id));
                         return;
                     }
 
                     ignoreCompleted = true;
-                } else if (priority != null || minPrio != null || maxPrio != null)
+                }
+                else if (priority != null || minPrio != null || maxPrio != null)
                 {
                     if (priority != null)
                     {
                         tasks = Database.GetTaskByPrio(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur), priority, priority).ToArray();
-                    } else
+                    }
+                    else
                     {
                         tasks = Database.GetTaskByPrio(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur), maxPrio, minPrio).ToArray();
                     }
@@ -276,12 +279,12 @@ namespace RemindMe
 
                 if (task == null)
                 {
-                    Console.Write( String.Format("No task with id {0} found", id) );
+                    Console.Write(String.Format("No task with id {0} found", id));
                     System.Environment.Exit(1);
                 }
 
                 task.Desc = desc == "" ? task.Desc : desc;
-                task.Prio = priority == null ? task.Prio : priority;
+                task.Prio = priority ?? task.Prio;
                 //task.Date = ... No option for Date yet. TODO: Need to add a lastModified field?
                 //task.Due = ... No option for setting Due date yet.
                 //task.Project = ... No option for setting Project yet.
@@ -306,16 +309,19 @@ namespace RemindMe
 
         static void DisplayTasks(Task?[]? tasks)
         {
-            Task?[] filteredTasks = new Task?[] { };
+            Task?[] filteredTasks = Array.Empty<Task?>();
 
-            filteredTasks = tasks != null ? tasks.Where( t => t != null && (t.IsCompleted == complete || ignoreCompleted) ).ToArray() : new Task?[] { };
+            filteredTasks = tasks != null ? tasks.Where(t => t != null && (t.IsCompleted == complete || ignoreCompleted)).ToArray() : Array.Empty<Task?>();
 
             if (filteredTasks.Length < 1) { Console.WriteLine("No tasks found."); return; }
 
             if (verbose) { Console.WriteLine(String.Format("{0} tasks found:", filteredTasks.Length)); }
             foreach (Task? task in filteredTasks)
             {
-                Console.WriteLine(String.Format("{0}:\t{1}\t{2}", task.Id, task.Desc, task.Prio));
+                if (task != null)
+                {
+                    Console.WriteLine(string.Format("{0}:\t{1}\t{2}", task.Id, task.Desc, task.Prio));
+                }
             }
         }
 
@@ -336,8 +342,8 @@ namespace RemindMe
             {
                 if (option.desc != null)
                 {
-                    Console.WriteLine(String.Format("\n{0}{1}:\t\t{2}", option.aliases[0].Replace("=", ""), 
-                                                                        option.optParam == null ? "" : " " + option.optParam + " ", 
+                    Console.WriteLine(String.Format("\n{0}{1}:\t\t{2}", option.aliases[0].Replace("=", ""),
+                                                                        option.optParam == null ? "" : " " + option.optParam + " ",
                                                                         option.desc));
                     foreach (string alias in option.aliases.Skip(1))
                     {

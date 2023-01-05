@@ -1,15 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace RemindMe
+﻿namespace RemindMe
 {
     public class ArgParseOption
     {
         public Action<string?> lambda = (val) => { return; };
-        public string[] aliases = new string[] { };
+        public string[] aliases = Array.Empty<string>();
         public bool passArgToLambda = false;
         public string? desc;
         public string? optParam;
@@ -27,7 +21,7 @@ namespace RemindMe
     {
         public static IEnumerable<string> ParseArgs(ArgParseOption[] opts, string[] args)
         {
-            List<string> remaining = new List<string>();
+            List<string> remaining = new();
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -38,8 +32,8 @@ namespace RemindMe
                 IEnumerable<ArgParseOption> matchedOps = opts.Where(opt => opt.aliases.Select(alias => alias.Replace("=", "")).Contains(curArg));
                 if (matchedOps.Count() != 1)
                 {
-                    if (matchedOps.Count() < 1)
-                    {   
+                    if (!matchedOps.Any())
+                    {
                         // Todo: bug here, this will break if arguments have a '-' in the middle (not at the start)
                         if (args[i].Contains('-'))
                         {
@@ -48,7 +42,8 @@ namespace RemindMe
                         remaining.Add(args[i]);
                         // Continue because we do not need to store or execute arg values / lambdas
                         continue;
-                    } else
+                    }
+                    else
                     {
                         throw new ArgParseException(String.Format("More than 1 option corresponds to the argument {0}.", args[i]));
                     }
@@ -57,7 +52,7 @@ namespace RemindMe
 
                 string? val = null;
 
-                if (curOpt.aliases.Where(alias => alias.Contains('=')).Count() > 0)
+                if (curOpt.aliases.Where(alias => alias.Contains('=')).Any())
                 {
                     if (args.Length == i)
                     {
@@ -68,7 +63,8 @@ namespace RemindMe
                     try
                     {
                         val = args[++i];
-                    } catch (IndexOutOfRangeException e)
+                    }
+                    catch (IndexOutOfRangeException)
                     {
                         throw new ArgParseNoValueException("No value given for option: " + args[--i]);
                     }
@@ -77,7 +73,8 @@ namespace RemindMe
                 if (curOpt.passArgToLambda)
                 {
                     curOpt.lambda(args[i]);
-                } else
+                }
+                else
                 {
                     curOpt.lambda(val);
                 }

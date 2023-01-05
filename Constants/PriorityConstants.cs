@@ -1,11 +1,4 @@
-﻿using RemindMe.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace RemindMe.Constants
+﻿namespace RemindMe.Constants
 {
     public class PriorityConstants
     {
