@@ -221,7 +221,7 @@ namespace RemindMe
             else if (CommandConstants.GET.Contains(command))
             // Get tasks from DB and display
             {
-                Task?[] tasks;
+                Task?[] tasks = Array.Empty<Task?>();
 
                 if (id != null)
                 {
@@ -248,7 +248,14 @@ namespace RemindMe
                 }
                 else
                 {
-                    tasks = Database.GetTaskByDesc(data[0]).ToArray();
+                    string desc = "";
+
+                    if (data.Any())
+                    {
+                        desc = data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur);
+                    }
+                    tasks = Database.GetTaskByDesc(desc).ToArray();
+
                 }
 
                 DisplayTasks(tasks);
