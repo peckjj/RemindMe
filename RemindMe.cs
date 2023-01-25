@@ -203,12 +203,7 @@ namespace RemindMe
                 return;
             }
 
-            if (!File.Exists(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/reminders.db"))
-            {
-                Console.WriteLine("Database does not exist, creating reminders.db");
-                Database.CreateDb();
-            }
-
+            Database.CheckDB();
             /**
              * ADD Command
              */

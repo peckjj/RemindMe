@@ -7,13 +7,31 @@ namespace RemindMe
 {
     internal class Database
     {
-        private static readonly string dbVersion = "0.1";
+        private static readonly string dbVersion = "0.2";
 
         private static readonly string connString = "Data Source=" +
                                            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) +
                                            "/reminders.db";
         private static readonly string allFieldsFromTasks = "desc, prio, date, due, status, project, id, isCompleted";
         private static readonly string selectAllFieldsFromTasks = "SELECT " + allFieldsFromTasks + " FROM tasks ";
+
+        internal static void CheckDB()
+        {
+            if (!File.Exists(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/reminders.db"))
+            {
+                Console.WriteLine("Database does not exist, creating reminders.db");
+                CreateDb();
+            }
+            else
+            {
+                string curVersion = GetDBVersion();
+
+                if (curVersion != dbVersion)
+                {
+                    UpdateDB(curVersion);
+                }
+            }
+        }
         internal static void CreateDb()
         {
             using SqliteConnection connection = new(connString);
@@ -44,6 +62,15 @@ namespace RemindMe
                     $createdOn,
                     $updatedOn
                 )
+                ;
+                CREATE TABLE ""notes"" (
+	                ""id""	INTEGER,
+	                ""desc""	TEXT NOT NULL,
+	                ""date""	TEXT NOT NULL,
+	                ""taskId""	INTEGER NOT NULL,
+	                FOREIGN KEY(""taskId"") REFERENCES ""tasks""(""id""),
+	                PRIMARY KEY(""id"" AUTOINCREMENT)
+                )
                 ;";
 
             var command = connection.CreateCommand();
@@ -57,6 +84,88 @@ namespace RemindMe
 
             return;
         }
+
+        private static void UpdateDB(string curVersion)
+        {
+            Console.WriteLine(string.Format("Updating DB from {0} to {1}", curVersion, dbVersion));
+
+            using SqliteConnection conn = new(connString);
+            conn.Open();
+            using var transaction = conn.BeginTransaction();
+
+            try
+            {
+                switch (curVersion)
+                {
+                    case "0.1":
+                        var command = conn.CreateCommand();
+
+                        command.CommandText = @" 
+                            CREATE TABLE """"notes"""" (
+	                            """"id""""	INTEGER,
+	                            """"desc""""	TEXT NOT NULL,
+	                            """"date""""	TEXT NOT NULL,
+	                            """"taskId""""	INTEGER NOT NULL,
+	                            FOREIGN KEY(""""taskId"""") REFERENCES """"tasks""""(""""id""""),
+	                            PRIMARY KEY(""""id"""" AUTOINCREMENT)
+                            )
+                            ;";
+                        command.ExecuteNonQuery();
+                        goto default;
+                    default:
+                        command = conn.CreateCommand();
+
+                        command.CommandText = @"
+                            UPDATE meta SET updatedOn = $updatedOn
+                        ";
+
+                        command.Parameters.AddWithValue("$updatedOn", DateTime.Now.ToString());
+
+                        command.ExecuteNonQuery();
+                        break;
+                }
+
+            }
+            catch (Exception e)
+            {
+                transaction.Rollback();
+                Console.WriteLine(e.Message);
+                System.Environment.Exit(1);
+            }
+            transaction.Commit();
+        }
+
+        private static string GetDBVersion()
+        {
+            using SqliteConnection conn = new(connString);
+            conn.Open();
+            using var transaction = conn.BeginTransaction();
+            try
+            {
+                var command = conn.CreateCommand();
+
+                command.CommandText = @"SELECT dbVersion FROM meta'";
+
+                object? result = command.ExecuteScalar();
+
+                if (result == null || result.GetType() != typeof(string))
+                {
+                    throw new DBException("DB Version could not be retrieved from the Database.");
+                }
+
+                transaction.Commit();
+
+                return (string)result;
+            }
+            catch (Exception e)
+            {
+                transaction.Rollback();
+                Console.WriteLine(e.Message);
+                System.Environment.Exit(1);
+            }
+            throw new DBException("Could not retrieve DB Version.");
+        }
+
         public static Task? AddTask(Task task)
         {
             Task? insertedTask = null;
