@@ -290,7 +290,7 @@ namespace RemindMe
             return ReaderToTaskList(reader);
         }
 
-        public static IEnumerable<Task> GetTaskByPrio(string? desc, Priority? max, Priority? min = null)
+        public static IEnumerable<Task> GetTaskByPrio(string? desc, Priority? max, Priority? min, string? Project)
         {
             using SqliteConnection conn = new(connString);
             conn.Open();
@@ -319,6 +319,13 @@ namespace RemindMe
                 firstCondition = false;
                 command.CommandText += firstCondition ? "WHERE " : " AND " + "prio >= $min";
                 command.Parameters.AddWithValue("$min", min.Value);
+            }
+
+            if (Project != null)
+            {
+                firstCondition = false;
+                command.CommandText += firstCondition ? "WHERE " : " AND " + "project = $proj";
+                command.Parameters.AddWithValue("$proj", Project);
             }
 
             command.CommandText += ';';

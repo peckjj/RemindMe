@@ -26,6 +26,8 @@ namespace RemindMe
         static Priority? minPrio = null;
         static Priority? maxPrio = null;
 
+        static string? Project = null;
+
         static bool ignoreCompleted = false;
         static void Main(string[] args)
         {
@@ -85,7 +87,14 @@ namespace RemindMe
                     "<ID>"
                     ),
                 new ArgParseOption (
-                    new string[] {"--priority=", "--prio=", "-p="},
+                    new string[] {"--project=", "--proj", "-p="},
+                    val =>
+                    {
+                        Project = val;
+                    }
+                    ),
+                new ArgParseOption (
+                    new string[] {"--priority=", "--prio=", "-P="},
                     val =>
                     {
                         if (val != null)
@@ -239,8 +248,15 @@ namespace RemindMe
                 }
 
                 // Allows for shorthand, you can add a task without quotes
-                Task? task = Database.AddTask(new Task(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur),
-                                                       new Priority(priority != null ? priority.Value : PriorityConstants.MED), complete));
+                Task? task = Database.AddTask(
+                    new Task(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur),
+                             new Priority(priority != null ? priority.Value : PriorityConstants.MED),
+                             DateTime.Now,
+                             DateTime.MaxValue,
+                             Project,
+                             null,
+                             "active",
+                             complete));
 
                 if (task != null)
                 {
@@ -273,6 +289,12 @@ namespace RemindMe
                     return;
                 }
 
+                string desc = "";
+                if (data.Any())
+                {
+                    desc = data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur);
+                }
+
                 if (id != null)
                 {
                     tasks = new Task?[] { Database.GetTask((long)id) };
@@ -285,27 +307,16 @@ namespace RemindMe
 
                     ignoreCompleted = true;
                 }
-                else if (priority != null || minPrio != null || maxPrio != null)
+                else
                 {
                     if (priority != null)
                     {
-                        tasks = Database.GetTaskByPrio(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur), priority, priority).ToArray();
+                        tasks = Database.GetTaskByPrio(desc, priority, priority, Project).ToArray();
                     }
                     else
                     {
-                        tasks = Database.GetTaskByPrio(data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur), maxPrio, minPrio).ToArray();
+                        tasks = Database.GetTaskByPrio(desc, maxPrio, minPrio, Project).ToArray();
                     }
-                }
-                else
-                {
-                    string desc = "";
-
-                    if (data.Any())
-                    {
-                        desc = data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur);
-                    }
-                    tasks = Database.GetTaskByDesc(desc).ToArray();
-
                 }
 
                 DisplayTasks(tasks);
@@ -344,7 +355,7 @@ namespace RemindMe
                 task.Prio = priority ?? task.Prio;
                 //task.Date = ... No option for Date yet. TODO: Need to add a lastModified field?
                 //task.Due = ... No option for setting Due date yet.
-                //task.Project = ... No option for setting Project yet.
+                task.Project = Project ?? task.Project;
                 //task.Status = ... No option for setting Status yet.
                 task.IsCompleted = complete | task.IsCompleted;
                 task = Database.UpdateTask(task);
@@ -356,7 +367,8 @@ namespace RemindMe
                 }
 
 
-            } else if (CommandConstants.NOTE.Contains(command))
+            }
+            else if (CommandConstants.NOTE.Contains(command))
             {
                 if (data.Length < 1)
                 {
@@ -392,7 +404,7 @@ namespace RemindMe
         {
             if (id == null)
             {
-                Console.Write("Fetching notes requires the id of a Task.");
+                Console.WriteLine("Fetching notes requires the id of a Task.");
                 UsageLite();
                 System.Environment.Exit(1);
             }

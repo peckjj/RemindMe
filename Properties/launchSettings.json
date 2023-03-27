@@ -9,6 +9,11 @@
       "commandName": "Project",
       "commandLineArgs": "-v",
       "workingDirectory": "C:\\Users\\pecki\\Home\\Code\\RemindMe\\RemindMe\\bin\\Debug\\net6.0\\runtimes"
+    },
+    "Filter by Project": {
+      "commandName": "Project",
+      "commandLineArgs": "get --project \"testProject\"",
+      "workingDirectory": "C:\\Users\\pecki\\Home\\Code\\RemindMe\\RemindMe\\bin\\Debug\\net6.0\\runtimes"
     }
   }
 }
