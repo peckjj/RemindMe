@@ -302,30 +302,30 @@ namespace RemindMe
 
             if (desc != null)
             {
-                firstCondition = false;
                 command.CommandText += "WHERE desc LIKE $desc";
                 command.Parameters.AddWithValue("$desc", '%' + desc + '%');
+                firstCondition = false;
             }
 
             if (max != null)
             {
-                firstCondition = false;
                 command.CommandText += firstCondition ? "WHERE " : " AND " + "prio <= $max";
                 command.Parameters.AddWithValue("$max", max.Value);
+                firstCondition = false;
             }
 
             if (min != null)
             {
-                firstCondition = false;
                 command.CommandText += firstCondition ? "WHERE " : " AND " + "prio >= $min";
                 command.Parameters.AddWithValue("$min", min.Value);
+                firstCondition = false;
             }
 
             if (Project != null)
             {
-                firstCondition = false;
                 command.CommandText += firstCondition ? "WHERE " : " AND " + "project = $proj";
                 command.Parameters.AddWithValue("$proj", Project);
+                firstCondition = false;
             }
 
             command.CommandText += ';';
