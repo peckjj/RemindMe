@@ -2,6 +2,7 @@
 using RemindMe.Constants;
 using RemindMe.Models;
 using System.Data;
+using System.Diagnostics;
 using System.Reflection;
 using Task = RemindMe.Models.Task;
 
@@ -14,6 +15,9 @@ namespace RemindMe
 
         static bool verbose = false;
         static bool complete = false;
+        static bool getNotes = false;
+        static bool getVersion = false;
+
         static long? id = null;
         static int taskWidth = -1;
         static string[] data = Array.Empty<string>();
@@ -29,7 +33,7 @@ namespace RemindMe
             options = new ArgParseOption[]
             {
                 new ArgParseOption (
-                    CommandConstants.ADD.Concat(CommandConstants.GET).Concat(CommandConstants.MODIFY).ToArray(),
+                    CommandConstants.ADD.Concat(CommandConstants.GET).Concat(CommandConstants.MODIFY).Concat(CommandConstants.NOTE).ToArray(),
                     val =>
                     {
                         if (val == null)
@@ -42,7 +46,7 @@ namespace RemindMe
                             command = val;
                         } else
                         {
-                            Console.WriteLine(String.Format("Discovered the command '{0}' in the description. Please use quotes for descriptions which include command aliases.", val));
+                            Console.WriteLine(String.Format("Discovered the command '{0}' in the description. Only one command is allowed. Please use quotes for descriptions which include command aliases.", val));
                             System.Environment.Exit(1);
                         }
                     },
@@ -51,7 +55,7 @@ namespace RemindMe
                     passArgToLambda: true
                     ),
                 new ArgParseOption (
-                    new string[]{"--verbose", "-v"},
+                    new string[]{"--verbose", "-V"},
                     val => verbose = true,
                     "Turns on verbose logging to console"
                     ),
@@ -181,6 +185,16 @@ namespace RemindMe
                         }
                     },
                     "Overrides default maximum length for displaying task descriptions."
+                    ),
+                new ArgParseOption (
+                    new string[] {"--note", "-n"},
+                    val => getNotes = true,
+                    "Get the notes for a Task with a given <id>"
+                    ),
+                new ArgParseOption (
+                    new string[] {"--version", "-v"},
+                    val => getVersion = true,
+                    "Returns the current version of reme.exe"
                     )
             };
             try
@@ -197,18 +211,19 @@ namespace RemindMe
                 }
             }
 
-            if (command == null)
+            if (command == null && !getVersion)
             {
                 UsageLite();
                 return;
             }
 
-            if (!File.Exists(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/reminders.db"))
+            if (getVersion)
             {
-                Console.WriteLine("Database does not exist, creating reminders.db");
-                Database.CreateDb();
+                Console.WriteLine("v" + getFileVersion());
+                return;
             }
 
+            Database.CheckDB();
             /**
              * ADD Command
              */
@@ -218,8 +233,9 @@ namespace RemindMe
             {
                 if (data.Length < 1)
                 {
+                    Console.WriteLine("A task must have a description body.");
                     UsageLite();
-                    return;
+                    System.Environment.Exit(1);
                 }
 
                 // Allows for shorthand, you can add a task without quotes
@@ -250,6 +266,12 @@ namespace RemindMe
             // Get tasks from DB and display
             {
                 Task?[] tasks = Array.Empty<Task?>();
+
+                if (getNotes)
+                {
+                    GetAndDisplayNotes();
+                    return;
+                }
 
                 if (id != null)
                 {
@@ -334,12 +356,74 @@ namespace RemindMe
                 }
 
 
+            } else if (CommandConstants.NOTE.Contains(command))
+            {
+                if (data.Length < 1)
+                {
+                    Console.WriteLine("A note must have a description body.");
+                    UsageLite();
+                    System.Environment.Exit(1);
+                }
+
+                string desc = data[0] + data.Skip(1).Aggregate("", (acc, cur) => acc + " " + cur);
+
+                if (id == null)
+                {
+                    Console.Write("Creating a note requires the id of a Task.");
+                    UsageLite();
+                    System.Environment.Exit(1);
+                }
+                // Allows for shorthand, you can add a note without quotes
+                Note? note = Database.AddNote(new Note((long)id, desc, DateTime.Now));
+
+                DisplayNotes(new Note?[] { note });
+
             }
             else
             {
+                Console.WriteLine("Command not recognized.");
                 UsageLite();
+                System.Environment.Exit(1);
             }
 
+        }
+
+        static void GetAndDisplayNotes()
+        {
+            if (id == null)
+            {
+                Console.Write("Fetching notes requires the id of a Task.");
+                UsageLite();
+                System.Environment.Exit(1);
+            }
+
+            Note[] notes = Database.GetNotes((long)id).ToArray();
+
+            DisplayNotes(notes);
+
+            return;
+        }
+
+        static void DisplayNotes(Note?[]? notes)
+        {
+            if (notes == null || id == null) return;
+
+            DisplayTasks(new Task?[] { Database.GetTask((long)id) });
+
+            if (notes.Length < 1)
+            {
+                Console.WriteLine($"No notes for Task ID: {id}");
+            }
+
+            Console.WriteLine();
+
+            foreach (Note? note in notes)
+            {
+                if (note != null)
+                {
+                    Console.WriteLine($"{note.Desc}");
+                }
+            }
         }
 
         static void DisplayTasks(Task?[]? tasks)
@@ -416,6 +500,8 @@ namespace RemindMe
 
         static void UsageLite()
         {
+            Console.WriteLine("reme.exe v" + getFileVersion());
+
             Console.WriteLine("Usage: reme <Command> [opts]\nCommands:");
             Console.WriteLine("\nadd <task> [opts]:\t\tAdds a new task to the list");
             Console.WriteLine("get <task> [opts]:\t\tGets a list of tasks. [opts] can be used to apply filters. <task> will be used to search for similar tasks");
@@ -448,6 +534,23 @@ namespace RemindMe
                     }
                 }
             }
+        }
+
+        static string getFileVersion()
+        {
+            string? FilePath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location + "./reme.exe");
+
+            if (FilePath != null)
+            {
+                string? FileVersion = FileVersionInfo.GetVersionInfo(FilePath).FileVersion;
+
+                if (FileVersion != null)
+                {
+                    return FileVersion;
+                }
+            }
+
+            throw new Exception("Could not retrieve File Version.");
         }
     }
 }

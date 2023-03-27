@@ -7,13 +7,33 @@ namespace RemindMe
 {
     internal class Database
     {
-        private static readonly string dbVersion = "0.1";
+        private static readonly string dbVersion = "0.2";
 
         private static readonly string connString = "Data Source=" +
                                            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) +
                                            "/reminders.db";
         private static readonly string allFieldsFromTasks = "desc, prio, date, due, status, project, id, isCompleted";
+        private static readonly string allFieldsFromNotes = "id, desc, date, taskId";
         private static readonly string selectAllFieldsFromTasks = "SELECT " + allFieldsFromTasks + " FROM tasks ";
+        private static readonly string selectAllFieldsFromNotes = "SELECT " + allFieldsFromNotes + " FROM notes ";
+
+        internal static void CheckDB()
+        {
+            if (!File.Exists(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/reminders.db"))
+            {
+                Console.WriteLine("Database does not exist, creating reminders.db");
+                CreateDb();
+            }
+            else
+            {
+                string curVersion = GetDBVersion();
+
+                if (curVersion != dbVersion)
+                {
+                    UpdateDB(curVersion);
+                }
+            }
+        }
         internal static void CreateDb()
         {
             using SqliteConnection connection = new(connString);
@@ -22,27 +42,36 @@ namespace RemindMe
             // Create tasks table
             string createTables = @"
                 CREATE TABLE ""tasks"" (
-	                ""id""	        INTEGER,
-	                ""desc""	    TEXT NOT NULL,
-	                ""date""	    TEXT NOT NULL,
-	                ""due""	        TEXT,
-	                ""prio""	    INTEGER NOT NULL,
-	                ""project""	    TEXT,
-	                ""status""	    TEXT NOT NULL,
-	                ""isCompleted""	TEXT NOT NULL CHECK(""isCompleted"" = ""True"" OR ""isCompleted"" = ""False""),
-	                PRIMARY KEY(""id"" AUTOINCREMENT)
+                    ""id""	        INTEGER,
+                    ""desc""	    TEXT NOT NULL,
+                    ""date""	    TEXT NOT NULL,
+                    ""due""	        TEXT,
+                    ""prio""	    INTEGER NOT NULL,
+                    ""project""	    TEXT,
+                    ""status""	    TEXT NOT NULL,
+                    ""isCompleted""	TEXT NOT NULL CHECK(""isCompleted"" = ""True"" OR ""isCompleted"" = ""False""),
+                    PRIMARY KEY(""id"" AUTOINCREMENT)
                 )
                 ;
                 CREATE TABLE ""meta"" (
-	                ""db_version""	TEXT NOT NULL UNIQUE,
-	                ""createdOn""	TEXT NOT NULL,
-	                ""updatedOn""	INTEGER NOT NULL
+                    ""dbVersion""	TEXT NOT NULL UNIQUE,
+                    ""createdOn""	TEXT NOT NULL,
+                    ""updatedOn""	INTEGER NOT NULL
                 )
                 ;
                 INSERT INTO meta VALUES(
                     $dbVersion,
                     $createdOn,
                     $updatedOn
+                )
+                ;
+                CREATE TABLE ""notes"" (
+                    ""id""	INTEGER,
+                    ""desc""	TEXT NOT NULL,
+                    ""date""	TEXT NOT NULL,
+                    ""taskId""	INTEGER NOT NULL,
+                    FOREIGN KEY(""taskId"") REFERENCES ""tasks""(""id""),
+                    PRIMARY KEY(""id"" AUTOINCREMENT)
                 )
                 ;";
 
@@ -57,6 +86,88 @@ namespace RemindMe
 
             return;
         }
+
+        private static void UpdateDB(string curVersion)
+        {
+            Console.WriteLine(string.Format("Updating DB from {0} to {1}", curVersion, dbVersion));
+
+            using SqliteConnection conn = new(connString);
+            conn.Open();
+            using var transaction = conn.BeginTransaction();
+
+            try
+            {
+                switch (curVersion)
+                {
+                    case "0.1":
+                        var command = conn.CreateCommand();
+
+                        command.CommandText = @" 
+                            CREATE TABLE """"notes"""" (
+                                """"id""""	INTEGER,
+                                """"desc""""	TEXT NOT NULL,
+                                """"date""""	TEXT NOT NULL,
+                                """"taskId""""	INTEGER NOT NULL,
+                                FOREIGN KEY(""""taskId"""") REFERENCES """"tasks""""(""""id""""),
+                                PRIMARY KEY(""""id"""" AUTOINCREMENT)
+                            )
+                            ;";
+                        command.ExecuteNonQuery();
+                        goto default;
+                    default:
+                        command = conn.CreateCommand();
+
+                        command.CommandText = @"
+                            UPDATE meta SET updatedOn = $updatedOn
+                        ";
+
+                        command.Parameters.AddWithValue("$updatedOn", DateTime.Now.ToString());
+
+                        command.ExecuteNonQuery();
+                        break;
+                }
+
+            }
+            catch (Exception e)
+            {
+                transaction.Rollback();
+                Console.WriteLine(e.Message);
+                System.Environment.Exit(1);
+            }
+            transaction.Commit();
+        }
+
+        private static string GetDBVersion()
+        {
+            using SqliteConnection conn = new(connString);
+            conn.Open();
+            using var transaction = conn.BeginTransaction();
+            try
+            {
+                var command = conn.CreateCommand();
+
+                command.CommandText = @"SELECT dbVersion FROM meta";
+
+                object? result = command.ExecuteScalar();
+
+                if (result == null || result.GetType() != typeof(string))
+                {
+                    throw new DBException("DB Version could not be retrieved from the Database.");
+                }
+
+                transaction.Commit();
+
+                return (string)result;
+            }
+            catch (Exception e)
+            {
+                transaction.Rollback();
+                Console.WriteLine(e.Message);
+                System.Environment.Exit(1);
+            }
+            throw new DBException("Could not retrieve DB Version.");
+        }
+
         public static Task? AddTask(Task task)
         {
             Task? insertedTask = null;
@@ -152,7 +263,7 @@ namespace RemindMe
                 if (tasks.Count() > 1)
                 {
                     transaction.Rollback();
-                    throw new Exception("GetTask(id) returned more than one row");
+                    throw new DBException("GetTask(id) returned more than one row");
                 }
 
                 transaction.Commit();
@@ -267,6 +378,136 @@ namespace RemindMe
                 }
             }
             return GetTask((long)task.Id);
+        }
+
+        public static Note? AddNote(Note note)
+        {
+            Note? insertedNote = null;
+            long? insertedId = null;
+
+            using (SqliteConnection conn = new(connString))
+            {
+                conn.Open();
+                using (var transaction = conn.BeginTransaction())
+                {
+                    try
+                    {
+
+                        var command = conn.CreateCommand();
+
+                        command.CommandText =
+                        @"
+                        INSERT INTO notes (
+                            desc,
+                            date, 
+                            taskId
+                        )
+                        VALUES(
+                            $Desc,
+                            $Date,
+                            $TaskId
+                        );
+                        select last_insert_rowid();
+                        ";
+
+                        command.Parameters.AddWithValue("$Desc", note.Desc);
+                        command.Parameters.AddWithValue("$Date", note.Date.ToString());
+                        command.Parameters.AddWithValue("$TaskId", note.TaskId);
+
+                        insertedId = (long?)(command.ExecuteScalar());
+
+                        if (insertedId == null)
+                        {
+                            throw new DBException("Insertion failed, no row id");
+                        }
+
+                        transaction.Commit();
+
+
+                    }
+                    catch (Exception e)
+                    {
+                        if (e is not DBException)
+                        {
+                            transaction.Rollback();
+                            Console.WriteLine(e);
+                            Console.WriteLine("\nThe database was not modified.");
+                            System.Environment.Exit(1);
+                        }
+                    }
+                }
+                if (insertedId != null) { insertedNote = GetNote((long)insertedId); }
+            }
+
+            return insertedNote;
+        }
+
+        public static Note? GetNote(long id)
+        {
+            Note? note = null;
+
+            using (SqliteConnection conn = new(connString))
+            {
+                conn.Open();
+                using var transaction = conn.BeginTransaction();
+                var command = conn.CreateCommand();
+                command.CommandText = selectAllFieldsFromNotes +
+                @"
+                        WHERE id = $id;
+                    ";
+                command.Parameters.AddWithValue("$id", id);
+
+                var reader = command.ExecuteReader();
+
+                IEnumerable<Note> notes = ReaderToNoteList(reader);
+
+                if (notes.Count() > 1)
+                {
+                    transaction.Rollback();
+                    throw new DBException("GetNote(id) returned more than one row");
+                }
+
+                transaction.Commit();
+                note = notes.FirstOrDefault();
+            }
+            return note;
+        }
+
+        public static IEnumerable<Note> GetNotes(long id)
+        {
+            using SqliteConnection conn = new(connString);
+            conn.Open();
+            using var transaction = conn.BeginTransaction();
+            var command = conn.CreateCommand();
+            command.CommandText = selectAllFieldsFromNotes +
+            @"
+                        WHERE taskId = $id;
+                    ";
+            command.Parameters.AddWithValue("$id", id);
+
+            var reader = command.ExecuteReader();
+
+
+            transaction.Commit();
+
+            return ReaderToNoteList(reader).OrderByDescending(note => note.Date);
+        }
+
+        private static IEnumerable<Note> ReaderToNoteList(SqliteDataReader reader)
+        {
+            List<Note> result = new();
+
+            while (reader.Read())
+            {
+                result.Add(new Note(
+                        reader.GetInt64(0), // Id,
+                        reader.GetInt64(3), // TaskId
+                        reader.GetString(1), // desc
+                        reader.GetDateTime(2) // date
+                        ));
+            }
+
+            return result;
         }
 
         private static IEnumerable<Task> ReaderToTaskList(SqliteDataReader reader)
