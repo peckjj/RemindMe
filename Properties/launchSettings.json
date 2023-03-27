@@ -2,7 +2,12 @@
   "profiles": {
     "RemindMe": {
       "commandName": "Project",
-      "commandLineArgs": "get -w 30"
+      "commandLineArgs": "note --id 1 \"Test note\"",
+      "workingDirectory": "C:\\Users\\pecki\\Home\\Code\\RemindMe\\RemindMe\\bin\\Debug\\net6.0\\runtimes"
+    },
+    "Get Version": {
+      "commandName": "Project",
+      "commandLineArgs": "-v",
       "workingDirectory": "C:\\Users\\pecki\\Home\\Code\\RemindMe\\RemindMe\\bin\\Debug\\net6.0\\runtimes"
     }
   }

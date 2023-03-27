@@ -3,9 +3,9 @@
     public class Note
     {
         long? Id { get; set; }
-        string Desc { get; set; }
-        long TaskId { get; set; }
-        DateTime Date { get; set; }
+        public string Desc { get; set; }
+        public long TaskId { get; set; }
+        public DateTime Date { get; set; }
 
 
         public Note(long taskId, string desc, DateTime? date = null) : this(null, taskId, desc, date ?? DateTime.Now)
